@@ -227,7 +227,7 @@
 
   // ===================== WEBSOCKET =====================
   function connectWebSocket() {
-    socket = io(WS_URL, {
+    socket = io(WS_URL + '/ws', {
       transports: ['websocket', 'polling'] // fallback ke polling jika websocket diblokir
     });
 
