@@ -117,7 +117,7 @@
   const CSRF_TOKEN = '{{ csrf_token() }}';
   const ROUTES = {
     devicesAjax: '{{ route('admin.network.devices.ajax') }}',
-    deviceName: '{{ route('admin.network.devices.name', '') }}',
+    deviceName: '{{ route('admin.network.devices.name', ['ip' => '__IP__']) }}',
     wake: '{{ route('admin.network.wake') }}',
     control: '{{ route('admin.network.control') }}'
   };
@@ -359,7 +359,8 @@
   const name = document.getElementById('renameName').value.trim();
   if (!name) return;
   try {
-  const res = await fetch(ROUTES.deviceName + '/' + ip, {
+  const url = ROUTES.deviceName.replace('__IP__', ip);
+  const res = await fetch(url, {
   method: 'POST',
   headers: {
   'Content-Type': 'application/json',
