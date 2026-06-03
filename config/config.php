@@ -1,5 +1,11 @@
 <?php
 
 return [
-    'name' => 'NetworkDevices',
+  'name' => 'NetworkDevices',
+  'api' => [
+    'base_url' => env('DEVICE_DISCOVERY_URL', 'http://192.168.1.200:5000'),
+    'token' => env('DEVICE_DISCOVERY_TOKEN', ''),
+    'timeout' => 5,
+  ],
+  'refresh_interval' => 30, // detik untuk polling (jika tidak pakai WebSocket)
 ];
