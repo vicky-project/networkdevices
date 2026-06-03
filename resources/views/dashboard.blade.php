@@ -119,7 +119,7 @@
   // ===================== KONFIGURASI =====================
   const API_BASE = "{{ config('networkdevices.api.base_url') }}";
   const USE_SECURE = {{ config('networkdevices.api.use_secure', false) ? 'true' : 'false' }};
-  const WS_URL = USE_SECURE ? API_BASE.replace(/^http/, 'wss'): API_BASE.replace(/^http/, 'ws');
+  const WS_URL = API_BASE.replace(/^http|https/, 'ws');
   const CSRF_TOKEN = '{{ csrf_token() }}';
 
   // Fungsi untuk menyesuaikan protokol URL dari route Laravel
