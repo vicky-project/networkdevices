@@ -12,7 +12,7 @@ Route::middleware(['web', 'auth'])->prefix('admin/network')->name('admin.network
 
   // AJAX data devices
   Route::get('/devices', [DeviceController::class, 'getDevicesAjax'])
-  ->name('devices.ajax');
+  ->name('devices.ajax')->middleware('can:'. Permission::VIEW_DEVICES);
 
   // Update nama
   Route::post('/devices/{ip}/name', [DeviceController::class, 'updateName'])

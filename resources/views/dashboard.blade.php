@@ -118,13 +118,23 @@
 <script>
   // ===================== KONFIGURASI =====================
   const API_BASE = "{{ config('networkdevices.api.base_url') }}";
-  const WS_URL = API_BASE.replace(/^http/, 'ws');
+  const USE_SECURE = {{ config('networkdevices.api.use_secure', false) ? 'true' : 'false' }};
+  const WS_URL = USE_SECURE ? API_BASE.replace(/^http/, 'wss'): API_BASE.replace(/^http/, 'ws');
   const CSRF_TOKEN = '{{ csrf_token() }}';
+
+  // Fungsi untuk menyesuaikan protokol URL dari route Laravel
+  function adjustUrl(url) {
+    if (USE_SECURE) {
+      return url.replace(/^http:/, 'https:');
+    }
+    return url;
+  }
+
   const ROUTES = {
-    devicesAjax: '{{ route('admin.network.devices.ajax') }}',
-    deviceName: '{{ route('admin.network.devices.name', ['ip' => '__IP__']) }}',
-    wake: '{{ route('admin.network.wake') }}',
-    control: '{{ route('admin.network.control') }}'
+    devicesAjax: adjustUrl('{{ route('admin.network.devices.ajax') }}'),
+    deviceName: adjustUrl('{{ route('admin.network.devices.name', ['ip' => '__IP__']) }}'),
+    wake: adjustUrl('{{ route('admin.network.wake') }}'),
+    control: adjustUrl('{{ route('admin.network.control') }}')
   };
 
   // ===================== STATE =====================
