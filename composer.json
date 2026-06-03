@@ -1,0 +1,30 @@
+{
+    "name": "nwidart/networkdevices",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\NetworkDevices\\": "app/",
+            "Modules\\NetworkDevices\\Database\\Factories\\": "database/factories/",
+            "Modules\\NetworkDevices\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\NetworkDevices\\Tests\\": "tests/"
+        }
+    }
+}
