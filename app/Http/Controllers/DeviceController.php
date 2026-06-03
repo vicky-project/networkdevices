@@ -33,7 +33,15 @@ class DeviceController extends Controller
   * Endpoint API untuk mendapatkan data perangkat (AJAX)
   */
   public function getDevicesAjax() {
-    return response()->json($this->discovery->getDevices());
+    try {
+      return response()->json($this->discovery->getDevices());
+    } catch(\Exception $e) {
+      \Log::error('Failed to get Devices', [
+        'message' => $e->getMessage(),
+        'trace' => $e->getTrace()
+      ]);
+      return response()->json([], 500);
+    }
   }
 
   /**
