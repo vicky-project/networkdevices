@@ -64,34 +64,45 @@
   </div>
 </div>
 
-{{-- ========== MODAL KONTROL ========== --}}
+{{-- ========== MODAL KONTROL DINAMIS ========== --}}
 <div class="modal fade" id="controlModal" tabindex="-1">
   <div class="modal-dialog">
-    <form id="controlForm" class="modal-content">
+    <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title">🎛️ Kontrol Perangkat</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        <input type="hidden" id="controlIp">
+        {{-- Info perangkat --}}
+        <div class="mb-3 p-2 bg-light rounded">
+          <strong id="modalDeviceName"></strong><br>
+          <small class="text-muted">IP: <span id="modalDeviceIp"></span></small>
+          <small class="text-muted d-block" id="modalDeviceMac"></small>
+        </div>
+
+        {{-- Pilihan aksi --}}
         <div class="mb-3">
           <label class="form-label">Aksi</label>
           <select id="controlAction" class="form-select" required>
-            <option value="http_get">HTTP GET</option>
-            <option value="http_post">HTTP POST</option>
-            <option value="wol">Wake‑on‑LAN (Magic Packet)</option>
+            <option value="">-- Pilih Aksi --</option>
+            <option value="wol" id="wolOption">⚡ Wake‑on‑LAN</option>
+            <option value="http_get">🌐 HTTP GET (Buka URL)</option>
+            <option value="http_post">📤 HTTP POST (Kirim Data)</option>
           </select>
         </div>
-        <div id="controlParams">
-          <div class="mb-3" id="urlField">
+
+        {{-- Field dinamis --}}
+        <div id="dynamicControlFields">
+          <div class="mb-3 d-none" id="urlGroup">
             <label class="form-label">URL</label>
             <input type="url" id="controlUrl" class="form-control" placeholder="http://192.168.1.x/api">
+            <small class="text-muted">Default: http://<em>(ip perangkat)</em></small>
           </div>
-          <div class="mb-3 d-none" id="postDataField">
-            <label class="form-label">Data (JSON)</label>
-            <textarea id="controlData" class="form-control" rows="3" placeholder='{"key":"value"}'></textarea>
+          <div class="mb-3 d-none" id="postDataGroup">
+            <label class="form-label">Data JSON (opsional)</label>
+            <textarea id="controlData" class="form-control" rows="2" placeholder='{"key":"value"}'></textarea>
           </div>
-          <div class="mb-3 d-none" id="macField">
+          <div class="mb-3 d-none" id="macGroup">
             <label class="form-label">MAC Address</label>
             <input type="text" id="controlMac" class="form-control" placeholder="AA:BB:CC:DD:EE:FF">
           </div>
@@ -99,9 +110,9 @@
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
-        <button type="submit" class="btn btn-primary">Kirim Perintah</button>
+        <button type="button" class="btn btn-primary" id="sendControlBtn">Kirim Perintah</button>
       </div>
-    </form>
+    </div>
   </div>
 </div>
 @endsection
@@ -111,18 +122,15 @@
 <script>
   eruda.init();
 </script>
-{{-- Socket.IO Client CDN --}}
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-{{-- Moment.js untuk format waktu relatif --}}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
 <script>
   // ===================== KONFIGURASI =====================
   const API_BASE = "{{ config('networkdevices.api.base_url') }}";
   const USE_SECURE = {{ config('networkdevices.api.use_secure', false) ? 'true' : 'false' }};
-  const WS_URL = API_BASE.replace(/^http|https/, 'ws');
+  const WS_URL = API_BASE.replace(/^http/, 'ws');
   const CSRF_TOKEN = '{{ csrf_token() }}';
 
-  // Fungsi untuk menyesuaikan protokol URL dari route Laravel
   function adjustUrl(url) {
     if (USE_SECURE) {
       return url.replace(/^http:/, 'https:');
@@ -142,6 +150,7 @@
   let socket = null;
   let refreshTimer = null;
   let isSocketConnected = false;
+  let currentDevice = null;
 
   // ===================== DOM =====================
   const devicesContainer = document.getElementById('devicesContainer');
@@ -168,7 +177,7 @@
     return div.innerHTML;
   }
 
-  // ===================== FUNGSI RENDER =====================
+  // ===================== RENDER =====================
   const renderDevices = debounce(function() {
     const filtered = filterDevices();
     if (filtered.length === 0) {
@@ -373,7 +382,6 @@
         devices = data;
         renderDevices();
       } else {
-        // Tidak ada data atau gagal
         emptyState.textContent = 'Gagal memuat data perangkat. Mungkin Anda belum memiliki izin.';
         emptyState.classList.remove('d-none');
       }
@@ -384,7 +392,8 @@
       loadingSpinner.classList.add('d-none');
     }
   }
-  // ===================== AKSI =====================
+
+  // ===================== AKSI PERANGKAT =====================
   window.wakeDevice = async function(mac) {
     if (!confirm(`Kirim magic packet ke ${mac}?`)) return;
     try {
@@ -398,9 +407,7 @@
       } else {
         showToast('Gagal: ' + (result.message || 'unknown'), 'danger');
       }
-    } catch (e) {
-      // error sudah ditangani apiFetch
-    }
+    } catch (e) {}
   };
 
   window.openRenameModal = function(ip, currentName) {
@@ -432,42 +439,91 @@
   } catch (e) { }
   });
 
+  // ===================== MODAL KONTROL DINAMIS =====================
   window.openControlModal = function(ip) {
-    document.getElementById('controlIp').value = ip;
-    document.getElementById('controlAction').value = 'http_get';
-    updateControlFields();
+    currentDevice = devices.find(d => d.ip === ip);
+    if (!currentDevice) {
+      showToast('Perangkat tidak ditemukan.', 'danger');
+      return;
+    }
+
+    document.getElementById('modalDeviceName').textContent = currentDevice.name;
+    document.getElementById('modalDeviceIp').textContent = currentDevice.ip;
+    const macEl = document.getElementById('modalDeviceMac');
+    if (currentDevice.mac) {
+      macEl.textContent = 'MAC: ' + currentDevice.mac;
+      macEl.style.display = 'block';
+    } else {
+      macEl.style.display = 'none';
+    }
+
+    document.getElementById('controlAction').value = '';
+    document.getElementById('controlUrl').value = `http://${currentDevice.ip}/`;
+    document.getElementById('controlData').value = '';
+    document.getElementById('controlMac').value = currentDevice.mac || '';
+    hideAllControlFields();
+
+    const wolOption = document.getElementById('wolOption');
+    if (!currentDevice.mac) {
+      wolOption.disabled = true;
+      wolOption.textContent = '⚡ Wake‑on‑LAN (MAC tidak tersedia)';
+    } else {
+      wolOption.disabled = false;
+      wolOption.textContent = '⚡ Wake‑on‑LAN';
+    }
+
     controlModal.show();
   };
 
-  document.getElementById('controlAction').addEventListener('change', updateControlFields);
-
-  function updateControlFields() {
-    const action = document.getElementById('controlAction').value;
-    document.getElementById('urlField').classList.toggle('d-none', action === 'wol');
-    document.getElementById('postDataField').classList.toggle('d-none', action !== 'http_post');
-    document.getElementById('macField').classList.toggle('d-none', action !== 'wol');
+  function hideAllControlFields() {
+    document.getElementById('urlGroup').classList.add('d-none');
+    document.getElementById('postDataGroup').classList.add('d-none');
+    document.getElementById('macGroup').classList.add('d-none');
   }
 
-  document.getElementById('controlForm').addEventListener('submit', async function(e) {
-  e.preventDefault();
-  const ip = document.getElementById('controlIp').value;
-  const action = document.getElementById('controlAction').value;
-  const params = {};
+  document.getElementById('controlAction').addEventListener('change', function() {
+  const action = this.value;
+  hideAllControlFields();
+  switch (action) {
+  case 'http_get':
+  document.getElementById('urlGroup').classList.remove('d-none');
+  break;
+  case 'http_post':
+  document.getElementById('urlGroup').classList.remove('d-none');
+  document.getElementById('postDataGroup').classList.remove('d-none');
+  break;
+  case 'wol':
+  document.getElementById('macGroup').classList.remove('d-none');
+  break;
+  }
+  });
 
+  document.getElementById('sendControlBtn').addEventListener('click', async function() {
+  const action = document.getElementById('controlAction').value;
+  if (!action) {
+  showToast('Pilih aksi terlebih dahulu.', 'warning');
+  return;
+  }
+  if (!currentDevice) return;
+
+  const params = {};
   if (action === 'http_get' || action === 'http_post') {
-  params.url = document.getElementById('controlUrl').value;
+  params.url = document.getElementById('controlUrl').value.trim() || `http://${currentDevice.ip}/`;
   if (action === 'http_post') {
+  const dataStr = document.getElementById('controlData').value.trim();
+  if (dataStr) {
   try {
-  params.data = JSON.parse(document.getElementById('controlData').value);
+  params.data = JSON.parse(dataStr);
   } catch {
   showToast('Data JSON tidak valid.', 'danger');
   return;
   }
   }
+  }
   } else if (action === 'wol') {
-  params.mac = document.getElementById('controlMac').value;
+  params.mac = document.getElementById('controlMac').value.trim();
   if (!params.mac) {
-  showToast('Masukkan MAC address.', 'danger');
+  showToast('MAC address diperlukan.', 'danger');
   return;
   }
   }
@@ -475,12 +531,12 @@
   try {
   const res = await apiFetch(ROUTES.control, {
   method: 'POST',
-  body: JSON.stringify({ ip, action, params }),
+  body: JSON.stringify({ ip: currentDevice.ip, action, params }),
   });
   const result = await res.json();
   if (res.ok) {
   controlModal.hide();
-  showToast('Perintah terkirim.', 'success');
+  showToast('Perintah terkirim!', 'success');
   } else {
   showToast('Gagal: ' + (result.message || 'error'), 'danger');
   }
