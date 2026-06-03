@@ -143,46 +143,23 @@
   const renameModal = new bootstrap.Modal(document.getElementById('renameModal'));
   const controlModal = new bootstrap.Modal(document.getElementById('controlModal'));
 
-  async function apiFetch(url, options = {}) {
-    const defaultOptions = {
-      headers: {
-        'Accept': 'application/json',
-        'X-CSRF-TOKEN': CSRF_TOKEN,
-      },
-      credentials: 'same-origin',
-      // kirim cookie session
+  // ===================== UTILITAS =====================
+  function debounce(func, delay) {
+    let timer;
+    return function (...args) {
+      clearTimeout(timer);
+      timer = setTimeout(() => func.apply(this, args), delay);
     };
+  }
 
-    // Gabungkan options, header, dan body
-    const finalOptions = {
-      ...defaultOptions,
-      ...options,
-      headers: {
-        ...defaultOptions.headers,
-        ...(options.headers || {}),
-      },
-    };
-
-    // Jangan override credentials jika sudah diset
-    if (options.credentials) finalOptions.credentials = options.credentials;
-
-    const response = await apiFetch(url, finalOptions);
-
-    if (response.status === 401 || response.status === 403) {
-      showToast('Sesi Anda mungkin telah habis atau Anda tidak memiliki izin. Silakan muat ulang halaman.', 'danger');
-      throw new Error('Unauthorized');
-    }
-
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({}));
-      throw new Error(body.message || `HTTP ${response.status}`);
-    }
-
-    return response;
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.appendChild(document.createTextNode(str));
+    return div.innerHTML;
   }
 
   // ===================== FUNGSI RENDER =====================
-  function renderDevices() {
+  const renderDevices = debounce(function() {
     const filtered = filterDevices();
     if (filtered.length === 0) {
       devicesContainer.innerHTML = '';
@@ -197,13 +174,14 @@
     });
     devicesContainer.innerHTML = html;
     loadingSpinner.classList.add('d-none');
-  }
+  }, 100);
 
   function createDeviceCard(device) {
     const onlineClass = device.online ? 'success': 'secondary';
     const onlineBadge = device.online ? 'bg-success': 'bg-danger';
     const onlineText = device.online ? 'ON': 'OFF';
-    const lastSeen = device.last_seen ? moment(device.last_seen).fromNow(): '-';
+    const lastSeen = device.last_seen && typeof moment !== 'undefined'
+    ? moment(device.last_seen).fromNow(): (device.last_seen || '-');
     const mac = device.mac || 'Tidak diketahui';
     const manufacturer = device.manufacturer || '-';
     const model = device.model || '-';
@@ -257,16 +235,64 @@
     });
   }
 
-  function escapeHtml(str) {
-    const div = document.createElement('div');
-    div.appendChild(document.createTextNode(str));
-    return div.innerHTML;
+  // ===================== API FETCH =====================
+  async function apiFetch(url, options = {}) {
+    const defaultOptions = {
+      headers: {
+        'Accept': 'application/json',
+        'X-CSRF-TOKEN': CSRF_TOKEN,
+      },
+      credentials: 'same-origin',
+    };
+
+    const finalOptions = {
+      ...defaultOptions,
+      ...options,
+      headers: {
+        ...defaultOptions.headers,
+        ...(options.headers || {}),
+      },
+    };
+
+    if (options.credentials) finalOptions.credentials = options.credentials;
+
+    const response = await fetch(url, finalOptions);
+
+    if (response.status === 401 || response.status === 403) {
+      showToast('Sesi Anda mungkin telah habis atau Anda tidak memiliki izin.', 'danger');
+      throw new Error('Unauthorized');
+    }
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.message || `HTTP ${response.status}`);
+    }
+
+    return response;
   }
+
+  async function fetchDevicesAjax() {
+    try {
+      const res = await apiFetch(ROUTES.devicesAjax);
+      return await res.json();
+    } catch (e) {
+      console.error(e);
+      return null;
+    }
+  }
+
+  window.refreshDevices = async function() {
+    const data = await fetchDevicesAjax();
+    if (data) {
+      devices = data;
+      renderDevices();
+    }
+  };
 
   // ===================== WEBSOCKET =====================
   function connectWebSocket() {
-    socket = io(WS_URL + '/ws', {
-      transports: ['websocket', 'polling'] // fallback ke polling jika websocket diblokir
+    socket = io(WS_URL, {
+      transports: ['websocket', 'polling']
     });
 
     socket.on('connect', () => {
@@ -290,7 +316,6 @@
     });
 
     socket.on('device_new', (device) => {
-    console.log('device_new', device);
     const exists = devices.find(d => d.ip === device.ip);
     if (!exists) {
     devices.push(device);
@@ -300,7 +325,6 @@
     });
 
     socket.on('device_update', (device) => {
-    console.log('device_update', device);
     const idx = devices.findIndex(d => d.ip === device.ip);
     if (idx > -1) {
     devices[idx] = { ...devices[idx], ...device };
@@ -311,7 +335,6 @@
     });
 
     socket.on('device_offline', (data) => {
-    console.log('device_offline', data);
     const idx = devices.findIndex(d => d.ip === data.ip);
     if (idx > -1) {
     devices.splice(idx, 1);
@@ -333,40 +356,13 @@
     }, 30000);
   }
 
-  // ===================== DATA FETCH =====================
   async function fetchInitialDevices() {
-    try {
-      const data = await fetchDevicesAjax();
-      if (data) {
-        devices = data;
-        renderDevices();
-      }
-    } catch (e) {
-      console.error(e);
-      loadingSpinner.classList.add('d-none');
-      emptyState.classList.remove('d-none');
-      emptyState.textContent = 'Gagal memuat data.';
-    }
-  }
-
-  async function fetchDevicesAjax() {
-    try {
-      const res = await apiFetch(ROUTES.devicesAjax);
-      if (res.ok) return await res.json();
-    } catch (e) {
-      /* fall through */
-      console.error(e)
-    }
-    return null;
-  }
-
-  window.refreshDevices = async function() {
     const data = await fetchDevicesAjax();
     if (data) {
       devices = data;
       renderDevices();
     }
-  };
+  }
 
   // ===================== AKSI =====================
   window.wakeDevice = async function(mac) {
@@ -374,11 +370,7 @@
     try {
       const res = await apiFetch(ROUTES.wake, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-TOKEN': CSRF_TOKEN
-        },
-        body: JSON.stringify({ mac })
+        body: JSON.stringify({ mac }),
       });
       const result = await res.json();
       if (result.status === 'sent') {
@@ -387,7 +379,7 @@
         showToast('Gagal: ' + (result.message || 'unknown'), 'danger');
       }
     } catch (e) {
-      showToast('Gagal mengirim WOL.', 'danger');
+      // error sudah ditangani apiFetch
     }
   };
 
@@ -402,15 +394,11 @@
   const ip = document.getElementById('renameIp').value;
   const name = document.getElementById('renameName').value.trim();
   if (!name) return;
-  try {
   const url = ROUTES.deviceName.replace('__IP__', ip);
+  try {
   const res = await apiFetch(url, {
   method: 'POST',
-  headers: {
-  'Content-Type': 'application/json',
-  'X-CSRF-TOKEN': CSRF_TOKEN
-  },
-  body: JSON.stringify({ name })
+  body: JSON.stringify({ name }),
   });
   if (res.ok) {
   renameModal.hide();
@@ -420,12 +408,8 @@
   devices[idx].name = name;
   renderDevices();
   }
-  } else {
-  showToast('Gagal menyimpan nama.', 'danger');
   }
-  } catch (e) {
-  showToast('Error jaringan.', 'danger');
-  }
+  } catch (e) { }
   });
 
   window.openControlModal = function(ip) {
@@ -436,6 +420,7 @@
   };
 
   document.getElementById('controlAction').addEventListener('change', updateControlFields);
+
   function updateControlFields() {
     const action = document.getElementById('controlAction').value;
     document.getElementById('urlField').classList.toggle('d-none', action === 'wol');
@@ -470,11 +455,7 @@
   try {
   const res = await apiFetch(ROUTES.control, {
   method: 'POST',
-  headers: {
-  'Content-Type': 'application/json',
-  'X-CSRF-TOKEN': CSRF_TOKEN
-  },
-  body: JSON.stringify({ ip, action, params })
+  body: JSON.stringify({ ip, action, params }),
   });
   const result = await res.json();
   if (res.ok) {
@@ -483,12 +464,10 @@
   } else {
   showToast('Gagal: ' + (result.message || 'error'), 'danger');
   }
-  } catch (e) {
-  showToast('Error jaringan.', 'danger');
-  }
+  } catch (e) { }
   });
 
-  // ===================== UTILITAS =====================
+  // ===================== EVENT LISTENER =====================
   searchInput.addEventListener('input', renderDevices);
   typeFilter.addEventListener('change', renderDevices);
 
