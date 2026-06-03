@@ -117,7 +117,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
 <script>
   // ===================== KONFIGURASI =====================
-  const WS_URL = "{{ config('networkdevices.api.base_url') }}";
+  const API_BASE = "{{ config('networkdevices.api.base_url') }}";
+  const WS_URL = API_BASE.replace(/^http/, 'ws');
   const CSRF_TOKEN = '{{ csrf_token() }}';
   const ROUTES = {
     devicesAjax: '{{ route('admin.network.devices.ajax') }}',
