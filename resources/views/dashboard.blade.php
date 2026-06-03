@@ -143,6 +143,44 @@
   const renameModal = new bootstrap.Modal(document.getElementById('renameModal'));
   const controlModal = new bootstrap.Modal(document.getElementById('controlModal'));
 
+  async function apiFetch(url, options = {}) {
+    const defaultOptions = {
+      headers: {
+        'Accept': 'application/json',
+        'X-CSRF-TOKEN': CSRF_TOKEN,
+      },
+      credentials: 'same-origin',
+      // kirim cookie session
+    };
+
+    // Gabungkan options, header, dan body
+    const finalOptions = {
+      ...defaultOptions,
+      ...options,
+      headers: {
+        ...defaultOptions.headers,
+        ...(options.headers || {}),
+      },
+    };
+
+    // Jangan override credentials jika sudah diset
+    if (options.credentials) finalOptions.credentials = options.credentials;
+
+    const response = await apiFetch(url, finalOptions);
+
+    if (response.status === 401 || response.status === 403) {
+      showToast('Sesi Anda mungkin telah habis atau Anda tidak memiliki izin. Silakan muat ulang halaman.', 'danger');
+      throw new Error('Unauthorized');
+    }
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.message || `HTTP ${response.status}`);
+    }
+
+    return response;
+  }
+
   // ===================== FUNGSI RENDER =====================
   function renderDevices() {
     const filtered = filterDevices();
@@ -313,10 +351,11 @@
 
   async function fetchDevicesAjax() {
     try {
-      const res = await fetch(ROUTES.devicesAjax);
+      const res = await apiFetch(ROUTES.devicesAjax);
       if (res.ok) return await res.json();
     } catch (e) {
       /* fall through */
+      console.error(e)
     }
     return null;
   }
@@ -333,7 +372,7 @@
   window.wakeDevice = async function(mac) {
     if (!confirm(`Kirim magic packet ke ${mac}?`)) return;
     try {
-      const res = await fetch(ROUTES.wake, {
+      const res = await apiFetch(ROUTES.wake, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -365,7 +404,7 @@
   if (!name) return;
   try {
   const url = ROUTES.deviceName.replace('__IP__', ip);
-  const res = await fetch(url, {
+  const res = await apiFetch(url, {
   method: 'POST',
   headers: {
   'Content-Type': 'application/json',
@@ -429,7 +468,7 @@
   }
 
   try {
-  const res = await fetch(ROUTES.control, {
+  const res = await apiFetch(ROUTES.control, {
   method: 'POST',
   headers: {
   'Content-Type': 'application/json',
