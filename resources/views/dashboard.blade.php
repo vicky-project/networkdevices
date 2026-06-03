@@ -107,6 +107,10 @@
 @endsection
 
 @push('scripts')
+<script src="//cdn.jsdelivr.net/npm/eruda"></script>
+<script>
+  eruda.init();
+</script>
 {{-- Socket.IO Client CDN --}}
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 {{-- Moment.js untuk format waktu relatif --}}
