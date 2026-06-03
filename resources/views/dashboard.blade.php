@@ -357,13 +357,23 @@
   }
 
   async function fetchInitialDevices() {
-    const data = await fetchDevicesAjax();
-    if (data) {
-      devices = data;
-      renderDevices();
+    try {
+      const data = await fetchDevicesAjax();
+      if (data && Array.isArray(data)) {
+        devices = data;
+        renderDevices();
+      } else {
+        // Tidak ada data atau gagal
+        emptyState.textContent = 'Gagal memuat data perangkat. Mungkin Anda belum memiliki izin.';
+        emptyState.classList.remove('d-none');
+      }
+    } catch (e) {
+      emptyState.textContent = 'Terjadi kesalahan jaringan.';
+      emptyState.classList.remove('d-none');
+    } finally {
+      loadingSpinner.classList.add('d-none');
     }
   }
-
   // ===================== AKSI =====================
   window.wakeDevice = async function(mac) {
     if (!confirm(`Kirim magic packet ke ${mac}?`)) return;
