@@ -21,11 +21,9 @@ Route::middleware(['web', 'auth'])->prefix('admin/network')->name('admin.network
 
   // Wake on LAN
   Route::post('/wake', [DeviceController::class, 'wake'])
-  ->name('wake')
-  ->middleware('permission:' . Permission::MANAGE_DEVICES);
+  ->name('wake');
 
   // Kontrol generik
   Route::post('/control', [DeviceController::class, 'control'])
-  ->name('control')
-  ->middleware('permission:' . Permission::MANAGE_DEVICES);
+  ->name('control');
 });
