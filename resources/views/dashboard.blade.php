@@ -73,14 +73,12 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        {{-- Info perangkat --}}
         <div class="mb-3 p-2 bg-light rounded">
           <strong id="modalDeviceName"></strong><br>
           <small class="text-muted">IP: <span id="modalDeviceIp"></span></small>
           <small class="text-muted d-block" id="modalDeviceMac"></small>
         </div>
 
-        {{-- Pilihan aksi --}}
         <div class="mb-3">
           <label class="form-label">Aksi</label>
           <select id="controlAction" class="form-select" required>
@@ -91,7 +89,6 @@
           </select>
         </div>
 
-        {{-- Field dinamis --}}
         <div id="dynamicControlFields">
           <div class="mb-3 d-none" id="urlGroup">
             <label class="form-label">URL</label>
@@ -125,7 +122,6 @@
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
 <script>
-  // ===================== KONFIGURASI =====================
   const API_BASE = "{{ config('networkdevices.api.base_url') }}";
   const USE_SECURE = {{ config('networkdevices.api.use_secure', false) ? 'true' : 'false' }};
   const WS_URL = API_BASE.replace(/^http/, 'ws');
@@ -145,14 +141,12 @@
     control: adjustUrl('{{ route('admin.network.control') }}')
   };
 
-  // ===================== STATE =====================
   let devices = [];
   let socket = null;
   let refreshTimer = null;
   let isSocketConnected = false;
   let currentDevice = null;
 
-  // ===================== DOM =====================
   const devicesContainer = document.getElementById('devicesContainer');
   const loadingSpinner = document.getElementById('loadingSpinner');
   const emptyState = document.getElementById('emptyState');
@@ -162,7 +156,6 @@
   const renameModal = new bootstrap.Modal(document.getElementById('renameModal'));
   const controlModal = new bootstrap.Modal(document.getElementById('controlModal'));
 
-  // ===================== UTILITAS =====================
   function debounce(func, delay) {
     let timer;
     return function (...args) {
@@ -177,7 +170,6 @@
     return div.innerHTML;
   }
 
-  // ===================== RENDER =====================
   const renderDevices = debounce(function() {
     const filtered = filterDevices();
     if (filtered.length === 0) {
@@ -207,6 +199,22 @@
     const type = device.type ? device.type.toUpperCase(): '-';
     const services = device.services && device.services.length
     ? device.services.join(', '): '';
+    const caps = device.capabilities || [];
+
+    let actionButtons = '';
+    if (caps.includes('wol') && device.mac) {
+      actionButtons += `<button class="btn btn-outline-secondary btn-sm" onclick="wakeDevice('${device.mac}')">⚡ WOL</button>`;
+    }
+    if (caps.includes('samsung_tv')) {
+      actionButtons += `<button class="btn btn-outline-danger btn-sm" onclick="controlSamsungTV('${device.ip}')">📺 Samsung</button>`;
+    }
+    if (caps.includes('lg_tv')) {
+      actionButtons += `<button class="btn btn-outline-danger btn-sm" onclick="controlLGTV('${device.ip}')">📺 LG</button>`;
+    }
+    if (caps.includes('upnp_wan')) {
+      actionButtons += `<button class="btn btn-outline-warning btn-sm" onclick="rebootRouter('${device.ip}')">🔄 Reboot</button>`;
+    }
+    actionButtons += `<button class="btn btn-outline-info btn-sm" onclick="openControlModal('${device.ip}')">🎛️ Kontrol</button>`;
 
     return `
     <div class="col-xl-3 col-lg-4 col-md-6 mb-4 device-card" data-ip="${device.ip}">
@@ -231,9 +239,7 @@
     </div>
     <div class="card-footer bg-transparent">
     <div class="btn-group w-100" role="group">
-    ${device.mac ? `<button class="btn btn-outline-secondary btn-sm" onclick="wakeDevice('${device.mac}')">⚡ WOL</button>`: ''}
-    <button class="btn btn-outline-primary btn-sm" onclick="openRenameModal('${device.ip}', '${escapeHtml(device.name)}')">✏️ Nama</button>
-    <button class="btn btn-outline-info btn-sm" onclick="openControlModal('${device.ip}')">🎛️ Kontrol</button>
+    ${actionButtons}
     <a href="http://${device.ip}" target="_blank" class="btn btn-outline-dark btn-sm">🔗</a>
     </div>
     </div>
@@ -254,7 +260,6 @@
     });
   }
 
-  // ===================== API FETCH =====================
   async function apiFetch(url, options = {}) {
     const defaultOptions = {
       headers: {
@@ -263,30 +268,24 @@
       },
       credentials: 'same-origin',
     };
-
     const finalOptions = {
       ...defaultOptions,
       ...options,
       headers: {
         ...defaultOptions.headers,
-        ...(options.headers || {}),
+        ...(options.headers || {})
       },
     };
-
     if (options.credentials) finalOptions.credentials = options.credentials;
-
     const response = await fetch(url, finalOptions);
-
     if (response.status === 401 || response.status === 403) {
       showToast('Sesi Anda mungkin telah habis atau Anda tidak memiliki izin.', 'danger');
       throw new Error('Unauthorized');
     }
-
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
       throw new Error(body.message || `HTTP ${response.status}`);
     }
-
     return response;
   }
 
@@ -308,58 +307,39 @@
     }
   };
 
-  // ===================== WEBSOCKET =====================
   function connectWebSocket() {
     socket = io(WS_URL, {
       transports: ['websocket', 'polling']
     });
-
     socket.on('connect', () => {
-    console.log('WebSocket connected');
     isSocketConnected = true;
     connectionStatus.textContent = 'Live';
     connectionStatus.className = 'badge bg-success';
     fetchInitialDevices();
-    if (refreshTimer) {
-    clearInterval(refreshTimer);
-    refreshTimer = null;
-    }
+    if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
     });
-
     socket.on('disconnect', () => {
-    console.log('WebSocket disconnected');
     isSocketConnected = false;
     connectionStatus.textContent = 'Offline';
     connectionStatus.className = 'badge bg-danger';
     startPolling();
     });
-
     socket.on('device_new', (device) => {
-    const exists = devices.find(d => d.ip === device.ip);
-    if (!exists) {
+    if (!devices.find(d => d.ip === device.ip)) {
     devices.push(device);
     renderDevices();
     showToast(`Perangkat baru: ${device.name} (${device.ip})`, 'success');
     }
     });
-
     socket.on('device_update', (device) => {
     const idx = devices.findIndex(d => d.ip === device.ip);
-    if (idx > -1) {
-    devices[idx] = { ...devices[idx], ...device };
-    } else {
-    devices.push(device);
-    }
+    if (idx > -1) devices[idx] = { ...devices[idx], ...device };
+    else devices.push(device);
     renderDevices();
     });
-
     socket.on('device_offline', (data) => {
     const idx = devices.findIndex(d => d.ip === data.ip);
-    if (idx > -1) {
-    devices.splice(idx, 1);
-    renderDevices();
-    showToast(`Perangkat offline: ${data.ip}`, 'warning');
-    }
+    if (idx > -1) { devices.splice(idx, 1); renderDevices(); showToast(`Perangkat offline: ${data.ip}`, 'warning'); }
     });
   }
 
@@ -367,10 +347,7 @@
     if (refreshTimer) return;
     refreshTimer = setInterval(() => {
     fetchDevicesAjax().then(data => {
-    if (data && !isSocketConnected) {
-    devices = data;
-    renderDevices();
-    }
+    if (data && !isSocketConnected) { devices = data; renderDevices(); }
     });
     }, 30000);
   }
@@ -393,20 +370,14 @@
     }
   }
 
-  // ===================== AKSI PERANGKAT =====================
   window.wakeDevice = async function(mac) {
     if (!confirm(`Kirim magic packet ke ${mac}?`)) return;
     try {
       const res = await apiFetch(ROUTES.wake, {
-        method: 'POST',
-        body: JSON.stringify({ mac }),
+        method: 'POST', body: JSON.stringify({ mac })
       });
       const result = await res.json();
-      if (result.status === 'sent') {
-        showToast('Magic packet dikirim!', 'success');
-      } else {
-        showToast('Gagal: ' + (result.message || 'unknown'), 'danger');
-      }
+      showToast(result.status === 'sent' ? 'Magic packet dikirim!': 'Gagal: ' + (result.message || 'unknown'), result.status === 'sent' ? 'success': 'danger');
     } catch (e) {}
   };
 
@@ -423,46 +394,33 @@
   if (!name) return;
   const url = ROUTES.deviceName.replace('__IP__', ip);
   try {
-  const res = await apiFetch(url, {
-  method: 'POST',
-  body: JSON.stringify({ name }),
-  });
+  const res = await apiFetch(url, { method: 'POST', body: JSON.stringify({ name }) });
   if (res.ok) {
   renameModal.hide();
   showToast('Nama diperbarui!', 'success');
   const idx = devices.findIndex(d => d.ip === ip);
-  if (idx > -1) {
-  devices[idx].name = name;
-  renderDevices();
-  }
+  if (idx > -1) { devices[idx].name = name; renderDevices(); }
   }
   } catch (e) { }
   });
 
-  // ===================== MODAL KONTROL DINAMIS =====================
   window.openControlModal = function(ip) {
     currentDevice = devices.find(d => d.ip === ip);
     if (!currentDevice) {
-      showToast('Perangkat tidak ditemukan.', 'danger');
-      return;
+      showToast('Perangkat tidak ditemukan.', 'danger'); return;
     }
-
     document.getElementById('modalDeviceName').textContent = currentDevice.name;
     document.getElementById('modalDeviceIp').textContent = currentDevice.ip;
     const macEl = document.getElementById('modalDeviceMac');
     if (currentDevice.mac) {
       macEl.textContent = 'MAC: ' + currentDevice.mac;
       macEl.style.display = 'block';
-    } else {
-      macEl.style.display = 'none';
-    }
-
+    } else macEl.style.display = 'none';
     document.getElementById('controlAction').value = '';
     document.getElementById('controlUrl').value = `http://${currentDevice.ip}/`;
     document.getElementById('controlData').value = '';
     document.getElementById('controlMac').value = currentDevice.mac || '';
     hideAllControlFields();
-
     const wolOption = document.getElementById('wolOption');
     if (!currentDevice.mac) {
       wolOption.disabled = true;
@@ -471,7 +429,6 @@
       wolOption.disabled = false;
       wolOption.textContent = '⚡ Wake‑on‑LAN';
     }
-
     controlModal.show();
   };
 
@@ -484,66 +441,69 @@
   document.getElementById('controlAction').addEventListener('change', function() {
   const action = this.value;
   hideAllControlFields();
-  switch (action) {
-  case 'http_get':
-  document.getElementById('urlGroup').classList.remove('d-none');
-  break;
-  case 'http_post':
+  if (action === 'http_get') document.getElementById('urlGroup').classList.remove('d-none');
+  else if (action === 'http_post') {
   document.getElementById('urlGroup').classList.remove('d-none');
   document.getElementById('postDataGroup').classList.remove('d-none');
-  break;
-  case 'wol':
-  document.getElementById('macGroup').classList.remove('d-none');
-  break;
-  }
+  } else if (action === 'wol') document.getElementById('macGroup').classList.remove('d-none');
   });
 
   document.getElementById('sendControlBtn').addEventListener('click', async function() {
   const action = document.getElementById('controlAction').value;
-  if (!action) {
-  showToast('Pilih aksi terlebih dahulu.', 'warning');
-  return;
-  }
+  if (!action) { showToast('Pilih aksi terlebih dahulu.', 'warning'); return; }
   if (!currentDevice) return;
-
   const params = {};
   if (action === 'http_get' || action === 'http_post') {
   params.url = document.getElementById('controlUrl').value.trim() || `http://${currentDevice.ip}/`;
   if (action === 'http_post') {
   const dataStr = document.getElementById('controlData').value.trim();
   if (dataStr) {
-  try {
-  params.data = JSON.parse(dataStr);
-  } catch {
-  showToast('Data JSON tidak valid.', 'danger');
-  return;
-  }
+  try { params.data = JSON.parse(dataStr); } catch { showToast('Data JSON tidak valid.', 'danger'); return; }
   }
   }
   } else if (action === 'wol') {
   params.mac = document.getElementById('controlMac').value.trim();
-  if (!params.mac) {
-  showToast('MAC address diperlukan.', 'danger');
-  return;
+  if (!params.mac) { showToast('MAC address diperlukan.', 'danger'); return; }
   }
-  }
-
   try {
-  const res = await apiFetch(ROUTES.control, {
-  method: 'POST',
-  body: JSON.stringify({ ip: currentDevice.ip, action, params }),
-  });
+  const res = await apiFetch(ROUTES.control, { method: 'POST', body: JSON.stringify({ ip: currentDevice.ip, action, params }) });
   const result = await res.json();
-  if (res.ok) {
-  controlModal.hide();
-  showToast('Perintah terkirim!', 'success');
-  } else {
-  showToast('Gagal: ' + (result.message || 'error'), 'danger');
-  }
+  if (res.ok) { controlModal.hide(); showToast('Perintah terkirim!', 'success'); }
+  else showToast('Gagal: ' + (result.message || 'error'), 'danger');
   } catch (e) { }
   });
 
-  // ===================== EVENT LISTENER =====================
+  window.controlSamsungTV = function(ip) {
+    apiFetch(ROUTES.control, {
+      method: 'POST',
+      body: JSON.stringify({
+      ip, action: 'http_post',
+      params: { url: `http://${ip}:8001/api/v2/`, data: { method: "ms.remote.control", params: { Cmd: "Click", DataOfCmd: "KEY_POWER" } } }
+      })
+    }).then(res => res.json()).then(() => showToast('Perintah terkirim ke Samsung TV', 'success')).catch(() => showToast('Gagal', 'danger'));
+  };
+
+  window.controlLGTV = function(ip) {
+    apiFetch(ROUTES.control, {
+      method: 'POST',
+      body: JSON.stringify({
+      ip, action: 'http_post',
+      params: { url: `http://${ip}:3000/api/`, data: { command: "power" } }
+      })
+    }).then(res => res.json()).then(() => showToast('Perintah terkirim ke LG TV', 'success')).catch(() => showToast('Gagal', 'danger'));
+  };
+
+  window.rebootRouter = function(ip) {
+    if (!confirm('Yakin reboot router?')) return;
+    apiFetch(ROUTES.control, {
+      method: 'POST',
+      body: JSON.stringify({
+      ip, action: 'http_post',
+      params: { url: `http://${ip}:5000/reboot` }
+      })
+    }).then(res => res.json()).then(() => showToast('Perintah reboot dikirim', 'success')).catch(() => showToast('Gagal', 'danger'));
+  };
+
   searchInput.addEventListener('input', renderDevices);
   typeFilter.addEventListener('change', renderDevices);
 
@@ -557,9 +517,6 @@
     setTimeout(() => toast.remove(), 5000);
   }
 
-  // ===================== INISIALISASI =====================
-  document.addEventListener('DOMContentLoaded', () => {
-  connectWebSocket();
-  });
+  document.addEventListener('DOMContentLoaded', () => connectWebSocket());
 </script>
 @endpush
