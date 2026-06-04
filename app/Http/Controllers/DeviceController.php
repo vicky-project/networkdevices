@@ -73,12 +73,18 @@ class DeviceController extends Controller
       'action' => 'required|string',
       'params' => 'array',
     ]);
-    $result = $this->discovery->controlDevice(
-      $request->input('ip'),
-      $request->input('action'),
-      $request->input('params', [])
-    );
 
-    return response()->json($result);
+    try {
+      $result = $this->discovery->controlDevice(
+        $request->input('ip'),
+        $request->input('action'),
+        $request->input('params', [])
+      );
+
+      return response()->json($result);
+    } catch(\Exception $e) {
+      \Log::error();
+      return response()->json([], 500);
+    }
   }
 }
