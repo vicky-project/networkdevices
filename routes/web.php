@@ -14,11 +14,6 @@ Route::middleware(['web', 'auth'])->prefix('admin/network')->name('admin.network
   Route::get('/devices', [DeviceController::class, 'getDevicesAjax'])
   ->name('devices.ajax')->middleware('permission:'. Permission::VIEW_DEVICES);
 
-  // Update nama
-  Route::post('/devices/{ip}/name', [DeviceController::class, 'updateName'])
-  ->name('devices.name')
-  ->middleware('permission:' . Permission::MANAGE_DEVICES);
-
   // Wake on LAN
   Route::post('/wake', [DeviceController::class, 'wake'])
   ->name('wake');
@@ -26,4 +21,9 @@ Route::middleware(['web', 'auth'])->prefix('admin/network')->name('admin.network
   // Kontrol generik
   Route::post('/control', [DeviceController::class, 'control'])
   ->name('control');
+
+  // Update nama
+  Route::post('/devices/{ip}/name', [DeviceController::class, 'updateName'])
+  ->name('devices.name')
+  ->middleware('permission:' . Permission::MANAGE_DEVICES);
 });
